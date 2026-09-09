@@ -1,46 +1,98 @@
-using FreeboxMonitor.Worker.Services;
 using FreeboxMonitor.Worker.Models;
+using FreeboxMonitor.Worker.Services;
+using Microsoft.Extensions.Options;
 
 namespace FreeboxMonitor.Worker;
 
 public class Worker(
     ILogger<Worker> logger,
     FreeboxAuthService freeboxAuth,
-    IConfiguration configuration) : BackgroundService
+    FreeboxLanService freeboxLan,
+    DeviceEventRepository deviceEventRepository,
+    IOptions<FreeboxOptions> freeboxOptions) : BackgroundService
 {
+    private readonly FreeboxOptions _options = freeboxOptions.Value;
+    private readonly Dictionary<string, bool> _lastKnownState = new();
+    private string? _sessionToken;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var result = await freeboxAuth.RequestAuthorizationAsync(
-            appId: configuration["Freebox:AppId"]!,
-            appName: configuration["Freebox:AppName"]!,
-            appVersion: configuration["Freebox:AppVersion"]!,
-            deviceName: configuration["Freebox:DeviceName"]!);
-
-        if (result is null)
+        if (string.IsNullOrEmpty(_options.AppToken))
         {
-            logger.LogError("Échec de la demande d'autorisation, arrêt.");
+            logger.LogError("Aucun app_token trouvé dans la configuration.");
             return;
         }
 
-        logger.LogInformation("app_token reçu : {Token}", result.AppToken);
-        logger.LogInformation("En attente de validation sur l'écran de la Freebox...");
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
 
-        AuthorizeStatus? status;
         do
         {
-            await Task.Delay(2000, stoppingToken);
-            status = await freeboxAuth.CheckAuthorizationStatusAsync(result.TrackId);
-            logger.LogInformation("Statut actuel : {Status}", status?.Status);
+            await PollAsync();
         }
-        while (status is not null && status.Status == "pending");
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
 
-        if (status?.Status == "granted")
+    private async Task<bool> EnsureSessionAsync()
+    {
+        if (_sessionToken is not null)
         {
-            logger.LogInformation("Autorisation validée !");
+            return true;
         }
-        else
+
+        var session = await freeboxAuth.OpenSessionAsync(_options.AppId, _options.AppToken!);
+
+        if (session is null)
         {
-            logger.LogError("Autorisation refusée ou expirée : {Status}", status?.Status);
+            logger.LogError("Impossible d'ouvrir une session.");
+            return false;
+        }
+
+        _sessionToken = session.SessionToken;
+        return true;
+    }
+
+    private async Task PollAsync()
+    {
+        if (!await EnsureSessionAsync())
+        {
+            return;
+        }
+
+        var hosts = await freeboxLan.GetHostsAsync(_sessionToken!);
+
+        if (hosts is null)
+        {
+            logger.LogWarning("Échec de récupération des appareils, la session a peut-être expiré. Nouvelle tentative...");
+            _sessionToken = null;
+
+            if (!await EnsureSessionAsync())
+            {
+                return;
+            }
+
+            hosts = await freeboxLan.GetHostsAsync(_sessionToken!);
+
+            if (hosts is null)
+            {
+                logger.LogError("Échec définitif de récupération des appareils.");
+                return;
+            }
+        }
+
+        var trackedHosts = hosts
+            .Where(h => _options.TrackedDeviceNames.Contains(h.PrimaryName))
+            .ToList();
+
+        foreach (var host in trackedHosts)
+        {
+            var hasPreviousState = _lastKnownState.TryGetValue(host.PrimaryName, out var wasReachable);
+
+            if (hasPreviousState && wasReachable != host.Reachable)
+            {
+                await deviceEventRepository.InsertEventAsync(host.PrimaryName, host.Reachable);
+            }
+
+            _lastKnownState[host.PrimaryName] = host.Reachable;
         }
     }
 }

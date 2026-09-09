@@ -16,6 +16,27 @@ public class AuthorizeResult
 
 public class AuthorizeStatus
 {
-    public string Status { get; set; } = string.Empty; // "pending", "granted", "denied", "timeout"
+    public string Status { get; set; } = string.Empty;
     public string Challenge { get; set; } = string.Empty;
+}
+
+public class LoginStatus
+{
+    public bool LoggedIn { get; set; }
+    public string Challenge { get; set; } = string.Empty;
+}
+
+public class OpenSessionResult
+{
+    public string SessionToken { get; set; } = string.Empty;
+    public string Challenge { get; set; } = string.Empty;
+}
+
+public class LanHost
+{
+    public string Id { get; set; } = string.Empty;
+    public string PrimaryName { get; set; } = string.Empty;
+    public bool Reachable { get; set; }
+    public long LastTimeReachable { get; set; }
+    public string L2Ident { get; set; } = string.Empty; // souvent l'adresse MAC
 }
