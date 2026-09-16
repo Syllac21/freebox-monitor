@@ -1,0 +1,42 @@
+services:
+  worker:
+    image: ghcr.io/syllac21/freebox-monitor-worker:latest
+    container_name: freebox_monitor_worker
+    restart: unless-stopped
+    environment:
+      Freebox__BaseUrl: "http://mafreebox.freebox.fr"
+      Freebox__AppId: "fr.syllac.freeboxmonitor"
+      Freebox__AppName: "Freebox Monitor"
+      Freebox__AppVersion: "1.0.0"
+      Freebox__DeviceName: "vps-hetzner"
+      Freebox__AppToken: "${FREEBOX_APP_TOKEN}"
+      ConnectionStrings__FreeboxMonitorDb: "Host=postgres;Port=5432;Database=freebox_monitor;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Email__SmtpHost: "mail.syllac.fr"
+      Email__SmtpPort: "465"
+      Email__Username: "${EMAIL_USERNAME}"
+      Email__Password: "${EMAIL_PASSWORD}"
+      Email__FromAddress: "${EMAIL_USERNAME}"
+      Email__ToAddress: "${EMAIL_USERNAME}"
+    networks:
+      - traefik-net
+
+  web:
+    image: ghcr.io/syllac21/freebox-monitor-web:latest
+    container_name: freebox_monitor_web
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__FreeboxMonitorDb: "Host=postgres;Port=5432;Database=freebox_monitor;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      DashboardAuth__Username: "${DASHBOARD_USERNAME}"
+      DashboardAuth__Password: "${DASHBOARD_PASSWORD}"
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.freebox-monitor.entrypoints: "websecure"
+      traefik.http.routers.freebox-monitor.rule: "Host(`freebox.syllac.fr`)"
+      traefik.http.routers.freebox-monitor.tls.certresolver: "letsencrypt"
+      traefik.http.services.freebox-monitor.loadbalancer.server.port: "8080"
+    networks:
+      - traefik-net
+
+networks:
+  traefik-net:
+    external: true
