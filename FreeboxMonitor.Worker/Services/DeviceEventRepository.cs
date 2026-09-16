@@ -31,4 +31,18 @@ public class DeviceEventRepository
 
         _logger.LogInformation("Événement enregistré : {Device} — reachable: {Reachable}", deviceName, isReachable);
     }
+
+    public async Task<List<(string DeviceName, bool IsReachable, DateTimeOffset EventTime)>> GetTodayEventsAsync()
+    {
+        const string sql = """
+            SELECT device_name, is_reachable, event_time
+            FROM device_events
+            WHERE event_time >= CURRENT_DATE
+            ORDER BY device_name, event_time
+            """;
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        var results = await connection.QueryAsync<(string, bool, DateTimeOffset)>(sql);
+        return [.. results];
+    }
 }

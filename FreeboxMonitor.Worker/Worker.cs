@@ -9,6 +9,8 @@ public class Worker(
     FreeboxAuthService freeboxAuth,
     FreeboxLanService freeboxLan,
     DeviceEventRepository deviceEventRepository,
+    ReportBuilder reportBuilder,
+    EmailService emailService,
     IOptions<FreeboxOptions> freeboxOptions) : BackgroundService
 {
     private readonly FreeboxOptions _options = freeboxOptions.Value;
@@ -23,6 +25,14 @@ public class Worker(
             return;
         }
 
+        var pollingTask = RunPollingLoopAsync(stoppingToken);
+        var reportingTask = RunDailyReportLoopAsync(stoppingToken);
+
+        await Task.WhenAll(pollingTask, reportingTask);
+    }
+
+    private async Task RunPollingLoopAsync(CancellationToken stoppingToken)
+    {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
 
         do
@@ -30,6 +40,44 @@ public class Worker(
             await PollAsync();
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    private async Task RunDailyReportLoopAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var now = DateTime.Now;
+            var nextReportTime = now.Date.AddHours(20);
+
+            if (now >= nextReportTime)
+            {
+                nextReportTime = nextReportTime.AddDays(1);
+            }
+
+            var delay = nextReportTime - now;
+            logger.LogInformation("Prochain rapport quotidien prévu à {Time}", nextReportTime);
+
+            await Task.Delay(delay, stoppingToken);
+
+            await SendDailyReportAsync();
+        }
+    }
+
+    private async Task SendDailyReportAsync()
+    {
+        try
+        {
+            var events = await deviceEventRepository.GetTodayEventsAsync();
+            var html = reportBuilder.BuildDailyReportHtml(events);
+
+            await emailService.SendReportAsync(
+                $"Rapport Freebox Monitor — {DateTime.Now:dd/MM/yyyy}",
+                html);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Échec de la génération/envoi du rapport quotidien");
+        }
     }
 
     private async Task<bool> EnsureSessionAsync()

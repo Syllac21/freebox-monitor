@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="FreeboxMonitor.Web/FreeboxMonitor.Web.csproj" />
   <Project Path="FreeboxMonitor.Worker/FreeboxMonitor.Worker.csproj" />
 </Solution>
