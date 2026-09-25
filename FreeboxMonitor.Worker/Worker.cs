@@ -37,7 +37,14 @@ public class Worker(
 
         do
         {
-            await PollAsync();
+            try
+            {
+                await PollAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Erreur pendant le polling, on continue à la prochaine itération");
+            }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
