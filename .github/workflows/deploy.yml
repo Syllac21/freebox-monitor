@@ -29,7 +29,9 @@ jobs:
           context: .
           file: ./FreeboxMonitor.Worker/Dockerfile
           push: true
-          tags: ghcr.io/syllac21/freebox-monitor-worker:latest
+          tags: |
+            ghcr.io/syllac21/freebox-monitor-worker:latest
+            ghcr.io/syllac21/freebox-monitor-worker:${{ github.sha }}
 
       - name: Build and push Web image
         uses: docker/build-push-action@v5
@@ -37,7 +39,9 @@ jobs:
           context: .
           file: ./FreeboxMonitor.Web/Dockerfile
           push: true
-          tags: ghcr.io/syllac21/freebox-monitor-web:latest
+          tags: |
+            ghcr.io/syllac21/freebox-monitor-web:latest
+            ghcr.io/syllac21/freebox-monitor-web:${{ github.sha }}
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
@@ -47,5 +51,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /opt/freebox-monitor
+            sed -i "s|freebox-monitor-worker:.*|freebox-monitor-worker:${{ github.sha }}|" docker-compose.prod.yml
+            sed -i "s|freebox-monitor-web:.*|freebox-monitor-web:${{ github.sha }}|" docker-compose.prod.yml
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d

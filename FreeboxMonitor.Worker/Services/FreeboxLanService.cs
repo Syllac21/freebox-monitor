@@ -25,7 +25,6 @@ public class FreeboxLanService
         request.Headers.Add("X-Fbx-App-Auth", sessionToken);
 
         var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
 
         var content = await response.Content.ReadFromJsonAsync<FreeboxResponse<List<LanHost>>>(_jsonOptions);
 
