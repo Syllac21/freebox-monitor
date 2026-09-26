@@ -142,7 +142,7 @@ public class Worker(
         {
             var hasPreviousState = _lastKnownState.TryGetValue(host.PrimaryName, out var wasReachable);
 
-            if (hasPreviousState && wasReachable != host.Reachable)
+            if (!hasPreviousState || wasReachable != host.Reachable)
             {
                 await deviceEventRepository.InsertEventAsync(host.PrimaryName, host.Reachable);
             }
