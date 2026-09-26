@@ -25,15 +25,25 @@ public class FreeboxLanService
         request.Headers.Add("X-Fbx-App-Auth", sessionToken);
 
         var response = await _httpClient.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
 
-        var content = await response.Content.ReadFromJsonAsync<FreeboxResponse<List<LanHost>>>(_jsonOptions);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
 
-        if (content is null || !content.Success)
+        var success = root.TryGetProperty("success", out var successProp) && successProp.GetBoolean();
+
+        if (!success)
         {
-            _logger.LogError("Échec de la récupération des appareils : {Msg}", content?.Msg);
+            var msg = root.TryGetProperty("msg", out var msgProp) ? msgProp.GetString() : "raison inconnue";
+            _logger.LogError("Échec de la récupération des appareils : {Msg}", msg);
             return null;
         }
 
-        return content.Result;
+        if (!root.TryGetProperty("result", out var resultProp))
+        {
+            return null;
+        }
+
+        return JsonSerializer.Deserialize<List<LanHost>>(resultProp.GetRawText(), _jsonOptions);
     }
 }
