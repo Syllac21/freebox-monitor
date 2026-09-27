@@ -19,6 +19,7 @@ builder.Services.AddHttpClient<FreeboxLanService>(client =>
 });
 
 builder.Services.AddSingleton<DeviceEventRepository>();
+builder.Services.AddSingleton<TrackedDeviceRepository>();
 
 var app = builder.Build();
 
@@ -30,6 +31,48 @@ app.MapGet("/", async (DeviceEventRepository repository) =>
     var todayEvents = await repository.GetTodayEventsAsync();
 
     return Results.Text(BuildHtml(currentStatus, todayEvents), "text/html");
+});
+app.MapGet("/devices", async (
+    FreeboxAuthService freeboxAuth,
+    FreeboxLanService freeboxLan,
+    TrackedDeviceRepository trackedDeviceRepository,
+    IOptions<FreeboxOptions> freeboxOptions) =>
+{
+    var options = freeboxOptions.Value;
+    var trackedNames = await trackedDeviceRepository.GetTrackedDeviceNamesAsync();
+
+    var session = await freeboxAuth.OpenSessionAsync(options.AppId, options.AppToken);
+    var allHosts = session is not null
+        ? await freeboxLan.GetHostsAsync(session.SessionToken) ?? []
+        : [];
+
+    return Results.Text(BuildDevicesHtml(trackedNames, allHosts), "text/html");
+});
+
+app.MapPost("/devices/add", async (HttpRequest request, TrackedDeviceRepository repository) =>
+{
+    var form = await request.ReadFormAsync();
+    var deviceName = form["deviceName"].ToString();
+
+    if (!string.IsNullOrWhiteSpace(deviceName))
+    {
+        await repository.AddTrackedDeviceAsync(deviceName);
+    }
+
+    return Results.Redirect("/devices");
+});
+
+app.MapPost("/devices/remove", async (HttpRequest request, TrackedDeviceRepository repository) =>
+{
+    var form = await request.ReadFormAsync();
+    var deviceName = form["deviceName"].ToString();
+
+    if (!string.IsNullOrWhiteSpace(deviceName))
+    {
+        await repository.RemoveTrackedDeviceAsync(deviceName);
+    }
+
+    return Results.Redirect("/devices");
 });
 
 app.MapPost("/refresh", async (
@@ -125,6 +168,10 @@ static string BuildHtml(List<FreeboxMonitor.Web.Models.DeviceStatus> currentStat
             {StyleBlock}
         </head>
         <body>
+            <a href="/devices">⚙️ Gérer les appareils</a>
+            <form method="post" action="/refresh">
+                <button type="submit">🔄 Actualiser</button>
+            </form>
             <form method="post" action="/refresh">
                 <button type="submit">🔄 Actualiser</button>
             </form>
@@ -145,6 +192,115 @@ static string BuildHtml(List<FreeboxMonitor.Web.Models.DeviceStatus> currentStat
             <table>
                 <tr><th>Heure</th><th>Appareil</th><th>Événement</th></tr>
                 {eventRows}
+            </table>
+        </body>
+        </html>
+        """;
+}
+
+static string BuildDevicesHtml(List<string> trackedNames, List<FreeboxMonitor.Web.Models.LanHost> allHosts)
+{
+    const string StyleBlock = """
+        <style>
+            body {
+                font-family: -apple-system, sans-serif;
+                font-size: 16px;
+                padding: 16px;
+                margin: 0;
+            }
+            h1 {
+                font-size: 20px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 24px;
+            }
+            th, td {
+                padding: 10px 8px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+                font-size: 15px;
+            }
+            th {
+                background: #f2f2f2;
+            }
+            button {
+                font-size: 14px;
+                padding: 6px 12px;
+                border: none;
+                border-radius: 6px;
+                color: white;
+            }
+            .btn-remove {
+                background: #ff3b30;
+            }
+            .btn-add {
+                background: #34c759;
+            }
+            a {
+                display: inline-block;
+                margin-bottom: 16px;
+            }
+        </style>
+        """;
+
+    var trackedRows = trackedNames.Count > 0
+        ? string.Join("", trackedNames.Select(name => $"""
+            <tr>
+                <td>{name}</td>
+                <td>
+                    <form method="post" action="/devices/remove" style="margin:0">
+                        <input type="hidden" name="deviceName" value="{name}">
+                        <button type="submit" class="btn-remove">Retirer</button>
+                    </form>
+                </td>
+            </tr>
+            """))
+        : "<tr><td colspan=\"2\">Aucun appareil suivi</td></tr>";
+
+    var untrackedHosts = allHosts
+        .Where(h => !string.IsNullOrWhiteSpace(h.PrimaryName) && !trackedNames.Contains(h.PrimaryName))
+        .OrderBy(h => h.PrimaryName)
+        .ToList();
+
+    var availableRows = untrackedHosts.Count > 0
+        ? string.Join("", untrackedHosts.Select(h => $"""
+            <tr>
+                <td>{h.PrimaryName}</td>
+                <td>{(h.Reachable ? "🟢 Connecté" : "🔴 Déconnecté")}</td>
+                <td>
+                    <form method="post" action="/devices/add" style="margin:0">
+                        <input type="hidden" name="deviceName" value="{h.PrimaryName}">
+                        <button type="submit" class="btn-add">Ajouter</button>
+                    </form>
+                </td>
+            </tr>
+            """))
+        : "<tr><td colspan=\"3\">Aucun appareil disponible</td></tr>";
+
+    return $"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Gérer les appareils</title>
+            {StyleBlock}
+        </head>
+        <body>
+            <a href="/">← Retour au dashboard</a>
+
+            <h1>Appareils suivis</h1>
+            <table>
+                <tr><th>Appareil</th><th></th></tr>
+                {trackedRows}
+            </table>
+
+            <h1>Appareils disponibles</h1>
+            <table>
+                <tr><th>Appareil</th><th>Statut</th><th></th></tr>
+                {availableRows}
             </table>
         </body>
         </html>
