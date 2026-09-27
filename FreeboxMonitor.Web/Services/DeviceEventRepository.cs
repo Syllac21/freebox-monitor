@@ -45,4 +45,29 @@ public class DeviceEventRepository
         var results = await connection.QueryAsync<DeviceStatus>(sql);
         return results.ToList();
     }
+
+    public async Task InsertEventIfChangedAsync(string deviceName, bool isReachable)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+
+        const string lastStateSql = """
+            SELECT is_reachable
+            FROM device_events
+            WHERE device_name = @DeviceName
+            ORDER BY event_time DESC
+            LIMIT 1
+            """;
+
+        var lastState = await connection.QuerySingleOrDefaultAsync<bool?>(lastStateSql, new { DeviceName = deviceName });
+
+        if (lastState is null || lastState != isReachable)
+        {
+            const string insertSql = """
+                INSERT INTO device_events (device_name, is_reachable)
+                VALUES (@DeviceName, @IsReachable)
+                """;
+
+            await connection.ExecuteAsync(insertSql, new { DeviceName = deviceName, IsReachable = isReachable });
+        }
+    }
 }
