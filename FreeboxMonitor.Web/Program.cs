@@ -172,9 +172,6 @@ static string BuildHtml(List<FreeboxMonitor.Web.Models.DeviceStatus> currentStat
             <form method="post" action="/refresh">
                 <button type="submit">🔄 Actualiser</button>
             </form>
-            <form method="post" action="/refresh">
-                <button type="submit">🔄 Actualiser</button>
-            </form>
 
             <h1>Appareils connectés</h1>
             <table>
