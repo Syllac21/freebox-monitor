@@ -29,12 +29,13 @@ public class DeviceEventRepository(IConfiguration configuration)
     {
         const string sql = """
             SELECT
-                device_name AS DeviceName,
-                is_reachable AS IsReachable,
-                event_time AS EventTime
-            FROM device_events
-            WHERE event_time >= CURRENT_DATE
-            ORDER BY event_time DESC
+                de.device_name AS DeviceName,
+                de.is_reachable AS IsReachable,
+                de.event_time AS EventTime
+            FROM device_events de
+            INNER JOIN tracked_devices td ON td.device_name = de.device_name
+            WHERE de.event_time >= CURRENT_DATE
+            ORDER BY de.event_time DESC
             """;
 
         await using var connection = new NpgsqlConnection(_connectionString);
