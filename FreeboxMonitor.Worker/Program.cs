@@ -24,6 +24,6 @@ builder.Services.Configure<FreeboxOptions>(
 
 builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection(EmailOptions.SectionName));
-
+builder.Services.AddSingleton<TrackedDeviceRepository>();
 var host = builder.Build();
 host.Run();

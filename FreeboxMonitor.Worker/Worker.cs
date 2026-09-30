@@ -11,6 +11,7 @@ public class Worker(
     DeviceEventRepository deviceEventRepository,
     ReportBuilder reportBuilder,
     EmailService emailService,
+    TrackedDeviceRepository trackedDeviceRepository,
     IOptions<FreeboxOptions> freeboxOptions) : BackgroundService
 {
     private readonly FreeboxOptions _options = freeboxOptions.Value;
@@ -133,9 +134,9 @@ public class Worker(
                 return;
             }
         }
-
+        var trackedNames = await trackedDeviceRepository.GetTrackedDeviceNamesAsync();
         var trackedHosts = hosts
-            .Where(h => _options.TrackedDeviceNames.Contains(h.PrimaryName))
+            .Where(h => trackedNames.Contains(h.PrimaryName))
             .ToList();
 
         foreach (var host in trackedHosts)

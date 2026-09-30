@@ -79,9 +79,11 @@ app.MapPost("/refresh", async (
     FreeboxAuthService freeboxAuth,
     FreeboxLanService freeboxLan,
     DeviceEventRepository repository,
+    TrackedDeviceRepository trackedDeviceRepository,
     IOptions<FreeboxOptions> freeboxOptions) =>
 {
     var options = freeboxOptions.Value;
+    var trackedNames = await trackedDeviceRepository.GetTrackedDeviceNamesAsync();
 
     var session = await freeboxAuth.OpenSessionAsync(options.AppId, options.AppToken);
     if (session is null)
@@ -95,7 +97,7 @@ app.MapPost("/refresh", async (
         return Results.Redirect("/");
     }
 
-    var trackedHosts = hosts.Where(h => options.TrackedDeviceNames.Contains(h.PrimaryName));
+    var trackedHosts = hosts.Where(h => trackedNames.Contains(h.PrimaryName));
 
     foreach (var host in trackedHosts)
     {
