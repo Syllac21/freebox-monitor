@@ -4,24 +4,20 @@ using FreeboxMonitor.Web.Models;
 
 namespace FreeboxMonitor.Web.Services;
 
-public class DeviceEventRepository
+public class DeviceEventRepository(IConfiguration configuration)
 {
-    private readonly string _connectionString;
-
-    public DeviceEventRepository(IConfiguration configuration)
-    {
-        _connectionString = configuration.GetConnectionString("FreeboxMonitorDb")!;
-    }
+    private readonly string _connectionString = configuration.GetConnectionString("FreeboxMonitorDb")!;
 
     public async Task<List<DeviceStatus>> GetCurrentStatusAsync()
     {
         const string sql = """
-            SELECT DISTINCT ON (device_name)
-                device_name AS DeviceName,
-                is_reachable AS IsReachable,
-                event_time AS EventTime
-            FROM device_events
-            ORDER BY device_name, event_time DESC
+            SELECT DISTINCT ON (de.device_name)
+                de.device_name AS DeviceName,
+                de.is_reachable AS IsReachable,
+                de.event_time AS EventTime
+            FROM device_events de
+            INNER JOIN tracked_devices td ON td.device_name = de.device_name
+            ORDER BY de.device_name, de.event_time DESC
             """;
 
         await using var connection = new NpgsqlConnection(_connectionString);
